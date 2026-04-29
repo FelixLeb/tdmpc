@@ -5,7 +5,7 @@ import numpy as np
 from dm_control import suite
 from dm_control.suite.wrappers import action_scale, pixels
 from dm_env import StepType, specs
-import gym
+import gymnasium as gym
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning) 
 
@@ -170,7 +170,7 @@ class ExtendedTimeStepWrapper(dm_env.Environment):
 		return getattr(self._env, name)
 
 
-class TimeStepToGymWrapper(object):
+class TimeStepToGymWrapper(gym.Env):
 	def __init__(self, env, domain, task, action_repeat, modality):
 		try: # pixels
 			obs_shp = env.observation_spec().shape
@@ -228,14 +228,16 @@ class TimeStepToGymWrapper(object):
 			return np.concatenate([v.flatten() for v in obs.values()])
 		return obs
 
-	def reset(self):
+	def reset(self, **kwargs):
 		self.t = 0
-		return self._obs_to_array(self.env.reset().observation)
-	
+		return self._obs_to_array(self.env.reset().observation), {}
+
 	def step(self, action):
 		self.t += 1
 		time_step = self.env.step(action)
-		return self._obs_to_array(time_step.observation), time_step.reward, time_step.last() or self.t == self.ep_len, defaultdict(float)
+		terminated = time_step.last()
+		truncated = self.t == self.ep_len
+		return self._obs_to_array(time_step.observation), time_step.reward, terminated, truncated, defaultdict(float)
 
 	def render(self, mode='rgb_array', width=384, height=384, camera_id=0):
 		camera_id = dict(quadruped=2).get(self.domain, camera_id)
@@ -247,8 +249,8 @@ class DefaultDictWrapper(gym.Wrapper):
 		gym.Wrapper.__init__(self, env)
 
 	def step(self, action):
-		obs, reward, done, info = self.env.step(action)
-		return obs, reward, done, defaultdict(float, info)
+		obs, reward, terminated, truncated, info = self.env.step(action)
+		return obs, reward, terminated, truncated, defaultdict(float, info)
 
 
 def make_env(cfg):
